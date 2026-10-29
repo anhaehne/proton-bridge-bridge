@@ -1,0 +1,75 @@
+# Example only. No live namespace, Bridge installation or secret material is supplied.
+# Official Bridge must already run in this Pod's network namespace, e.g. as a
+# separately maintained container. Its vault volume must NOT be mounted here.
+# Merge this container/volumes into that existing Pod template; do not apply as-is.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bridge-with-paperless-proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bridge-with-paperless-proxy
+  template:
+    metadata:
+      labels:
+        app: bridge-with-paperless-proxy
+    spec:
+      securityContext:
+        fsGroup: 1654
+      containers:
+        - name: imap-proxy
+          image: REPLACE_WITH_REVIEWED_IMAGE_DIGEST
+          args: [--experimental, /config/config.json]
+          ports:
+            - name: imaps
+              containerPort: 1993
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1654
+            runAsGroup: 1654
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: tls
+              mountPath: /certs
+              readOnly: true
+            - name: state
+              mountPath: /state
+      volumes:
+        - name: config
+          configMap:
+            name: imap-proxy-config
+        - name: tls
+          secret:
+            secretName: imap-proxy-tls
+        - name: state
+          persistentVolumeClaim:
+            claimName: imap-proxy-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: imap-proxy
+spec:
+  selector:
+    app: bridge-with-paperless-proxy
+  ports:
+    - name: imaps
+      port: 1993
+      targetPort: imaps

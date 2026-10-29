@@ -1,0 +1,20 @@
+# Linux host running official Bridge on localhost. This file does not install Bridge.
+services:
+  imap-proxy:
+    build:
+      context: ..
+    image: proton-bridge-proxy:dev
+    network_mode: host
+    restart: "no" # Experimental disposable-account validation only.
+    read_only: true
+    user: "1654:1654"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 64
+    volumes:
+      - ../local/config.json:/config/config.json:ro
+      - ../local/certs:/certs:ro
+      - ../local/state:/state
+    tmpfs:
+      - /tmp:size=16m,mode=1777

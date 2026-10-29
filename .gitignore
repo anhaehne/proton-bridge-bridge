@@ -426,3 +426,11 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Runtime configuration and exported certificates must remain local.
+/state/
+/local/
+*.pem
+*.key
+*.pfx
+*.p12

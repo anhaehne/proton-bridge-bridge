@@ -1,0 +1,16 @@
+{
+  "ListenAddress": "127.0.0.1",
+  "ListenPort": 1993,
+  "Certificate": "/certs/proxy.pem",
+  "PrivateKey": "/certs/proxy.key",
+  "BridgeHost": "localhost",
+  "BridgePort": 1143,
+  "BridgeTls": "StartTls",
+  "BridgeTrust": "/certs/bridge.pem",
+  "Label": "Paperless-imported",
+  "StateDirectory": "/state",
+  "MaxMessageBytes": 33554432,
+  "MaxMailboxMessages": 10000,
+  "MaxConnections": 8,
+  "SessionTimeoutSeconds": 300
+}

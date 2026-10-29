@@ -1,0 +1,12 @@
+**/bin
+**/obj
+.git
+.agents
+.aws
+.codex
+local
+state
+tests
+**/*.pem
+**/*.key
+**/*.pfx

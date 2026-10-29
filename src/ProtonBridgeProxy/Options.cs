@@ -1,0 +1,48 @@
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
+using MailKit.Security;
+
+namespace ProtonBridgeProxy;
+
+public sealed record Options
+{
+    public string ListenAddress { get; init; } = "127.0.0.1";
+    public int ListenPort { get; init; } = 1993;
+    public required string Certificate { get; init; }
+    public required string PrivateKey { get; init; }
+    public string BridgeHost { get; init; } = "localhost";
+    public int BridgePort { get; init; } = 1143;
+    public string BridgeTls { get; init; } = "StartTls";
+    public string? BridgeTrust { get; init; }
+    public string Label { get; init; } = "Paperless-imported";
+    public string StateDirectory { get; init; } = "state";
+    public int MaxMessageBytes { get; init; } = 32 * 1024 * 1024;
+    public int MaxMailboxMessages { get; init; } = 10000;
+    public int MaxConnections { get; init; } = 8;
+    public int SessionTimeoutSeconds { get; init; } = 300;
+    public void Validate()
+    {
+        if (BridgeTls is not ("StartTls" or "SslOnConnect") || ListenPort is < 1 or > 65535 || BridgePort is < 1 or > 65535 ||
+            string.IsNullOrWhiteSpace(Label) || Label.StartsWith('\\') || Label.Any(char.IsControl) ||
+            MaxConnections < 1 || MaxMessageBytes < 1 || MaxMailboxMessages < 1 || SessionTimeoutSeconds < 1)
+            throw new InvalidDataException("Invalid proxy configuration.");
+    }
+    public SecureSocketOptions SocketOptions => Enum.Parse<SecureSocketOptions>(BridgeTls);
+}
+
+public static class Trust
+{
+    // A custom root changes trust anchors only; hostname, validity and chain checks remain mandatory.
+    public static bool Validate(X509Certificate? certificate, SslPolicyErrors errors, X509Certificate2 root)
+    {
+        if (certificate is null || (errors & (SslPolicyErrors.RemoteCertificateNameMismatch | SslPolicyErrors.RemoteCertificateNotAvailable)) != 0)
+            return false;
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(root);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck; // Local Bridge certificates have no revocation endpoint.
+        chain.ChainPolicy.DisableCertificateDownloads = true;
+        using var leaf = new X509Certificate2(certificate);
+        return chain.Build(leaf);
+    }
+}

@@ -27,10 +27,19 @@ public interface IBridgeMailbox : IAsyncDisposable
     Task AddLabelAsync(uint uid, CancellationToken ct);
 }
 
-public sealed class BridgeMailbox(Options options) : IBridgeMailbox
+public sealed class BridgeMailbox : IBridgeMailbox
 {
-    private readonly ImapClient _client = BridgeConnection.Create(options);
+    private readonly Options _options;
+    private readonly FetchBudget _budget;
+    private readonly ImapClient _client;
     private Journal? _journal;
+
+    public BridgeMailbox(Options options)
+    {
+        _options = options;
+        _budget = new FetchBudget(options.MaxMessageBytes);
+        _client = BridgeConnection.Create(options, _budget);
+    }
 
     public bool Authenticated => _client.IsAuthenticated;
 
@@ -41,11 +50,11 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
             throw new InvalidOperationException();
         }
 
-        await _client.ConnectAsync(options.BridgeHost, options.BridgePort, options.SocketOptions, ct);
+        await _client.ConnectAsync(_options.BridgeHost, _options.BridgePort, _options.SocketOptions, ct);
 
         // Bridge alone validates the supplied Bridge-generated credentials.
         await _client.AuthenticateAsync(user, password, ct);
-        _journal = new Journal(options.StateDirectory, user, $"{options.BridgeHost}:{options.BridgePort}", options.Label);
+        _journal = new Journal(_options.StateDirectory, user, $"{_options.BridgeHost}:{_options.BridgePort}", _options.Label);
     }
 
     private async Task OpenInboxAsync(CancellationToken ct)
@@ -56,16 +65,16 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
         }
     }
 
-    private async Task<IMailFolder> LabelAsync(CancellationToken ct) => await _client.GetFolderAsync("Labels/" + options.Label, ct);
+    private async Task<IMailFolder> LabelAsync(CancellationToken ct) => await _client.GetFolderAsync("Labels/" + _options.Label, ct);
 
     public async Task<InboxState> SelectAsync(CancellationToken ct)
     {
         await OpenInboxAsync(ct);
         await _client.NoOpAsync(ct);
         _journal!.ValidateEpoch(_client.Inbox.UidValidity);
-        if (_client.Inbox.Count > options.MaxMailboxMessages)
+        if (_client.Inbox.Count > _options.MaxMailboxMessages)
         {
-            throw new InvalidDataException();
+            throw new ResourceLimitException();
         }
 
         var messages = _client.Inbox.Count == 0 ? [] : await _client.Inbox.FetchAsync(0, -1,
@@ -73,37 +82,15 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
         return new InboxState(_client.Inbox.UidValidity, _client.Inbox.UidNext?.Id ?? 1, messages.ToArray());
     }
 
-    private async Task<byte[]> ReadAsync(IMailFolder folder, UniqueId uid, CancellationToken ct)
+    private Task<byte[]> ReadAsync(IMailFolder folder, UniqueId uid, CancellationToken ct) =>
+        RawMessages.ReadAsync(folder, uid, _options.MaxMessageBytes, ct);
+
+    private async Task<List<Fingerprint>> FingerprintsAsync(IMailFolder folder, IEnumerable<UniqueId> uids, CancellationToken ct)
     {
-        // MailKit GetStream uses BODY.PEEK[]; never reserialize MIME before hashing.
-        using var raw = await folder.GetStreamAsync(uid, ct);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int count;
-        while ((count = await raw.ReadAsync(chunk, ct)) > 0)
-        {
-            if (buffer.Length + count > options.MaxMessageBytes)
-            {
-                throw new InvalidDataException();
-            }
-
-            buffer.Write(chunk, 0, count);
-        }
-
-        return buffer.ToArray();
-    }
-
-    private async Task<List<Fingerprint>> FingerprintsAsync(IMailFolder folder, CancellationToken ct)
-    {
-        if (folder.Count > options.MaxMailboxMessages)
-        {
-            throw new InvalidDataException();
-        }
-
         var result = new List<Fingerprint>();
-        foreach (var uid in await folder.SearchAsync(SearchQuery.All, ct))
+        foreach (var uid in uids)
         {
-            result.Add(new Fingerprint(uid.Id, Identity.Hash(await ReadAsync(folder, uid, ct))));
+            result.Add(new Fingerprint(uid.Id, await RawMessages.HashAsync(folder, uid, ct)));
         }
 
         return result;
@@ -112,21 +99,53 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
     public async Task<HashSet<uint>> ProcessedAsync(CancellationToken ct)
     {
         _journal!.Reload();
+        using var scan = _budget.BeginScan(_options.MaxScanBytes);
         await OpenInboxAsync(ct);
         var validity = _client.Inbox.UidValidity;
-        var source = await FingerprintsAsync(_client.Inbox, ct);
+        _journal.ValidateEpoch(validity);
+        if (_client.Inbox.Count > _options.MaxMailboxMessages)
+        {
+            throw new ResourceLimitException();
+        }
+
+        var sourceUids = await _client.Inbox.SearchAsync(SearchQuery.All, ct);
         var label = await LabelAsync(ct);
         await label.OpenAsync(FolderAccess.ReadOnly, ct);
         try
         {
-            return Identity.Resolve(validity, label.UidValidity, source, await FingerprintsAsync(label, ct), _journal!.Entries);
+            if (label.Count > _options.MaxMailboxMessages)
+            {
+                throw new ResourceLimitException();
+            }
+
+            var labelUids = await label.SearchAsync(SearchQuery.All, ct);
+            var mappings = _journal.Entries.Where(mapping => mapping.SourceValidity == validity && mapping.LabelValidity == label.UidValidity).ToArray();
+            var knownLabelUids = mappings.Where(mapping => mapping.LabelUid is not null).Select(mapping => mapping.LabelUid!.Value).ToHashSet();
+            var unknownLabels = labelUids.Any(uid => !knownLabelUids.Contains(uid.Id));
+            var pending = _journal.Entries.Any(mapping => mapping.SourceValidity == validity && mapping.LabelUid is null);
+            if (!_options.AllowHashFallback && (unknownLabels || pending))
+            {
+                throw new IdentityException();
+            }
+
+            var labels = await FingerprintsAsync(label, labelUids, ct);
+            var mappedSourceUids = mappings.Select(mapping => mapping.SourceUid).ToHashSet();
+
+            // Unknown label membership needs a full ambiguity check; exact COPYUID mappings need only their source bytes.
+            var neededUids = unknownLabels || pending ? sourceUids : sourceUids.Where(uid => mappedSourceUids.Contains(uid.Id));
+            await OpenInboxAsync(ct);
+            var source = await FingerprintsAsync(_client.Inbox, neededUids, ct);
+            return Identity.Resolve(validity, label.UidValidity, source, labels, _journal.Entries, _options.AllowHashFallback);
         }
         finally
         {
-            await OpenInboxAsync(ct);
-            if (_client.Inbox.UidValidity != validity)
+            if (_client.IsConnected && _client.IsAuthenticated)
             {
-                throw new IdentityException();
+                await OpenInboxAsync(ct);
+                if (_client.Inbox.UidValidity != validity)
+                {
+                    throw new IdentityException();
+                }
             }
         }
     }
@@ -145,6 +164,17 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
 
     public async Task AddLabelAsync(uint uid, CancellationToken ct)
     {
+        if (!_options.AllowLabelWrites || _options.AllowedWriteUids.Length > 0 && !_options.AllowedWriteUids.Contains(uid))
+        {
+            throw new LabelWriteDeniedException();
+        }
+
+        await OpenInboxAsync(ct);
+        if (_options.AllowedWriteUids.Length > 0 && _client.Inbox.UidValidity != _options.AllowedWriteUidValidity)
+        {
+            throw new IdentityException();
+        }
+
         if (!_client.Capabilities.HasFlag(ImapCapabilities.UidPlus))
         {
             throw new IdentityException();
@@ -162,7 +192,7 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
             throw new IdentityException();
         }
 
-        var hash = Identity.Hash(await ReadAsync(uid, ct));
+        var hash = await RawMessages.HashAsync(_client.Inbox, new UniqueId(uid), ct);
         if (_client.Inbox.UidValidity != state.Validity)
         {
             throw new IdentityException();
@@ -187,12 +217,17 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
         }
 
         await label.OpenAsync(FolderAccess.ReadOnly, ct);
-        if (label.UidValidity != labelValidity || Identity.Hash(await ReadAsync(label, copied.Value, ct)) != hash)
+        if (label.UidValidity != labelValidity || await RawMessages.HashAsync(label, copied.Value, ct) != hash)
         {
             throw new IdentityException();
         }
 
         await OpenInboxAsync(ct);
+        if (_client.Inbox.UidValidity != state.Validity)
+        {
+            throw new IdentityException();
+        }
+
         _journal.Save(new Mapping(state.Validity, uid, labelValidity, copied.Value.Id, hash));
     }
 

@@ -434,3 +434,5 @@ FodyWeavers.xsd
 *.key
 *.pfx
 *.p12
+
+/artifacts/

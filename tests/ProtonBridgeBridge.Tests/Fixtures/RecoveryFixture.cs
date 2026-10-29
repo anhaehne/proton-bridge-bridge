@@ -17,6 +17,8 @@ internal sealed class RecoveryFixture : IAsyncDisposable
     private Options _options = null!;
     private string _configPath = null!;
 
+    public Options Settings => _options;
+
     public StockBridge Stock { get; private set; } = null!;
 
     public static async Task<RecoveryFixture> StartAsync(bool identicalDeliveries, CancellationToken cancellationToken)
@@ -51,6 +53,8 @@ internal sealed class RecoveryFixture : IAsyncDisposable
                 BridgeTrust = certPath,
                 ListenPort = ((IPEndPoint)imapPort.LocalEndpoint).Port,
                 HealthPort = ((IPEndPoint)healthPort.LocalEndpoint).Port,
+                AllowLabelWrites = true,
+                AllowHashFallback = true,
                 StateDirectory = Path.Combine(fixture._directory, "state")
             };
             fixture._configPath = Path.Combine(fixture._directory, "config.json");
@@ -62,6 +66,12 @@ internal sealed class RecoveryFixture : IAsyncDisposable
             await fixture.DisposeAsync();
             throw;
         }
+    }
+
+    public async Task ConfigureAsync(Options options, CancellationToken cancellationToken)
+    {
+        _options = options;
+        await File.WriteAllTextAsync(_configPath, JsonSerializer.Serialize(options), cancellationToken);
     }
 
     public async Task<ProxyProcess> StartProxyAsync(CancellationToken cancellationToken)

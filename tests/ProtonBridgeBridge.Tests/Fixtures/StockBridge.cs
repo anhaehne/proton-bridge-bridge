@@ -31,6 +31,9 @@ internal sealed class StockBridge(X509Certificate2 cert, bool startTls, Cancella
     // Optional barriers affect only this synthetic upstream, never the production proxy.
     public Func<CopyCheckpoint, CancellationToken, Task<bool>>? CheckpointAsync { get; set; }
 
+    public int? DeclaredBodyLength { get; set; }
+    public bool UidAfterBody { get; set; }
+
     public int LabelCount => _labels.Count;
 
     public List<string> Commands { get; } = [];
@@ -87,11 +90,12 @@ internal sealed class StockBridge(X509Certificate2 cert, bool startTls, Cancella
                 }
 
                 await SendAsync("* OK stock fixture\r\n");
+                var reader = new ImapReader(stream);
                 var label = false;
                 var copiedInSession = false;
                 while (!ct.IsCancellationRequested)
                 {
-                    var args = await new ImapReader(stream).ReadCommandAsync(ct);
+                    var args = await reader.ReadCommandAsync(ct);
                     if (args is null)
                     {
                         break;
@@ -111,10 +115,11 @@ internal sealed class StockBridge(X509Certificate2 cert, bool startTls, Cancella
                         case "STARTTLS":
                             await SendAsync(tag + " OK begin TLS\r\n");
                             await UpgradeAsync();
+                            reader = new ImapReader(stream);
                             continue;
                         case "AUTHENTICATE":
                             await SendAsync("+ \r\n");
-                            var auth = await new ImapReader(stream).ReadCommandAsync(ct);
+                            var auth = await reader.ReadCommandAsync(ct);
                             var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(auth![0].Text()));
                             if (decoded != "\0fixture\0secret")
                             {
@@ -185,6 +190,12 @@ internal sealed class StockBridge(X509Certificate2 cert, bool startTls, Cancella
                                             var a = Eval(query, ref i, uid);
                                             var b = Eval(query, ref i, uid);
                                             return a || b;
+                                        case "SUBJECT":
+                                            var subject = query[i++].Text();
+                                            using (var raw = new MemoryStream(box[uid].Raw))
+                                            {
+                                                return MimeKit.MimeMessage.Load(raw).Subject?.Contains(subject, StringComparison.OrdinalIgnoreCase) == true;
+                                            }
                                         case "UID":
                                             return Syntax.Uids(query[i++].Text()).Contains(new MailKit.UniqueId(uid));
                                         default:
@@ -225,9 +236,15 @@ internal sealed class StockBridge(X509Certificate2 cert, bool startTls, Cancella
                                             return;
                                         }
 
-                                        await SendAsync($"* {sequence} FETCH (UID {uid} BODY[] {{{message.Raw.Length}}}\r\n");
+                                        var uidPrefix = UidAfterBody ? "" : $"UID {uid} ";
+                                        await SendAsync($"* {sequence} FETCH ({uidPrefix}BODY[] {{{DeclaredBodyLength ?? message.Raw.Length}}}\r\n");
+                                        if (DeclaredBodyLength is not null)
+                                        {
+                                            return;
+                                        }
+
                                         await stream.WriteAsync(message.Raw, ct);
-                                        await SendAsync(")\r\n");
+                                        await SendAsync(UidAfterBody ? $" UID {uid})\r\n" : ")\r\n");
                                     }
                                     else
                                     {

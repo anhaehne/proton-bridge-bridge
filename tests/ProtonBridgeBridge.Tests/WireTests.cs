@@ -205,6 +205,7 @@ public class WireTests
                 BridgePort = Stock.Port,
                 BridgeTrust = Path.Combine(_dir, "root.pem"),
                 BridgeTls = startTls ? "StartTls" : "SslOnConnect",
+                AllowLabelWrites = true,
                 StateDirectory = _dir
             };
             _listener.Start();

@@ -7,6 +7,7 @@ permissions:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   DOTNET_NOLOGO: '1'
+  PAPERLESS_TEST_PYTHON: python
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -19,15 +20,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --require-hashes -r tests/requirements.txt
-      - run: dotnet restore --locked-mode
-      - run: dotnet format --no-restore --verify-no-changes
-      - run: dotnet format style --no-restore --verify-no-changes --diagnostics IDE0011
-      - run: dotnet test -c Release --no-restore
-        env:
-          PAPERLESS_TEST_PYTHON: python
-      - run: dotnet publish src/ProtonBridgeBridge -c Release --no-restore -o artifacts/ProtonBridgeBridge /p:UseAppHost=false
-      - run: docker build -t proton-bridge-bridge:test .
+      - run: bash scripts/build-candidate.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ProtonBridgeBridge-review-build
-          path: artifacts/ProtonBridgeBridge
+          path: artifacts/
+          compression-level: 0

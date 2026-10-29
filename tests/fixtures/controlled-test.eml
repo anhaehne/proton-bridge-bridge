@@ -1,0 +1,53 @@
+From: ProtonBridgeBridge test <sender@example.invalid>
+To: Operator test mailbox <recipient@example.invalid>
+Date: Thu, 29 Oct 2026 12:00:00 +0000
+Message-ID: <protonbridgebridge-rc1-fixture@example.invalid>
+Subject: ProtonBridgeBridge test rc1fixture
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="ProtonBridgeBridge-rc1-fixture-boundary"
+
+--ProtonBridgeBridge-rc1-fixture-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Disposable controlled-test message. Import only after approving the target ac=
+count. Two different PDF parts are included.
+
+--ProtonBridgeBridge-rc1-fixture-boundary
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="attachment.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2Jq
+CjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2Jq
+CjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIg
+NzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAw
+IFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNl
+Rm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNjUgPj4Kc3RyZWFt
+CkJUIC9GMSAxNiBUZiA3MiA3MjAgVGQgKFByb3RvbkJyaWRnZUJyaWRnZSBhdHRhY2htZW50IFBE
+RikgVGogRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAw
+MDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4g
+CjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXpl
+IDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQyNQolJUVPRgo=
+
+--ProtonBridgeBridge-rc1-fixture-boundary
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename="inline.PDF"
+MIME-Version: 1.0
+
+JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2Jq
+CjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2Jq
+CjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIg
+NzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAw
+IFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNl
+Rm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNjEgPj4Kc3RyZWFt
+CkJUIC9GMSAxNiBUZiA3MiA3MjAgVGQgKFByb3RvbkJyaWRnZUJyaWRnZSBpbmxpbmUgUERGKSBU
+aiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAw
+MDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAw
+MDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAv
+Um9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDIxCiUlRU9GCg==
+
+--ProtonBridgeBridge-rc1-fixture-boundary--

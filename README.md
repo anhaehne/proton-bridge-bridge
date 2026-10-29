@@ -2,13 +2,18 @@
 
 Experimental C#/ASP.NET Core 10 IMAP adapter for Paperless-ngx and **official, unmodified Proton Mail Bridge**. MailKit handles upstream IMAP, authentication, MIME octets and TLS; a bounded recursive-descent IMAP parser handles the deliberately small downstream command surface. ASP.NET Core hosts the IMAP listener as a background service and supplies HTTP health endpoints. No Proton login, 2FA, decryption or update code is included.
 
-**State:** implemented and tested with synthetic TLS IMAP fixtures and Paperless 3.3.4's exact `imap-tools` 1.15.0 client dependency. Not tested against official Bridge or a running Paperless consumer. No real account, deployment or production release has been used. The executable requires `--experimental`; use disposable accounts until the [live validation gate](docs/validation.md) passes.
+**Candidate:** `0.1.0-rc.1`, prepared for an operator-supervised first test. Writes
+are disabled by default. Start with the [controlled-test runbook](docs/first-production-test.md),
+read-only UID discovery and preflight, then explicitly permit label additions only
+to reviewed test UIDs in their recorded UIDVALIDITY epoch. Official Bridge and full
+Paperless ingestion remain unverified; this is not an unattended production release.
+The executable retains `--experimental` for the listening service.
 
 ## What it does
 
-Paperless connects using implicit TLS and its Bridge-generated username/password. The proxy validates those credentials through Bridge using mandatory STARTTLS or implicit TLS. It exposes normal `INBOX` with original UIDs and UIDVALIDITY, fetches with `BODY.PEEK[]`, and translates the configured processed label into `UID COPY` to an existing `Labels/Paperless-imported` mailbox. It never creates a label automatically.
+Paperless connects using implicit TLS and its Bridge-generated username/password. The proxy validates those credentials through Bridge using mandatory STARTTLS or implicit TLS. It exposes normal `INBOX` with original UIDs and UIDVALIDITY, fetches with `BODY.PEEK[]`, and translates the configured processed label into `UID COPY` to an existing `Labels/Paperless-imported` mailbox. It never creates a label automatically. `AllowLabelWrites` defaults to false; an optional `AllowedWriteUids` scope also requires the matching `AllowedWriteUidValidity`.
 
-`X-GM-LABELS`, `KEYWORD` and `UNKEYWORD` for the configured label share one membership calculation. COPYUID mappings distinguish byte-identical deliveries; SHA-256 of complete raw IMAP octets provides a **provisional, unvalidated-on-Bridge** fallback for labels created outside this proxy. Ambiguous matches stop the operation. Message-ID is never used for identity.
+`X-GM-LABELS`, `KEYWORD` and `UNKEYWORD` for the configured label share one membership calculation. COPYUID mappings distinguish byte-identical deliveries; SHA-256 of complete raw IMAP octets provides a **provisional, unvalidated-on-Bridge** fallback for labels created outside this proxy. Untracked labels and pending COPY outcomes stop the operation by default. `AllowHashFallback=true` explicitly enables the unvalidated hash fallback; keep it false for the first controlled test. Ambiguous matches still stop the operation. Message-ID is never used for identity.
 
 This implements the Gmail-label subset needed by Paperless, not the complete Gmail extension. It advertises `X-GM-EXT-1` before authentication because Paperless uses that capability to choose its tag action. Other Gmail features, arbitrary labels, message deletion, moves, flag changes and expunge are rejected. Use only with the documented Paperless rule, not as a general mail server. See [protocol and identity](docs/protocol.md).
 
@@ -19,7 +24,7 @@ The [Compose example](deploy/compose.yaml) assumes a **Linux host already runnin
 1. Install and sign into official Bridge independently. Create a disposable test label `Paperless-imported` in Proton. Export Bridge's public TLS certificate through its settings; keep the exported private key away from the proxy. Check the certificate's SANs against `BridgeHost` (normally `localhost`).
 2. Create `local/certs` and `local/state`. Copy [config.example.json](deploy/config.example.json) to `local/config.json`. Supply a proxy certificate/key matching the hostname Paperless will use as `local/certs/proxy.pem` and `local/certs/proxy.key`. Save only Bridge's public certificate as `local/certs/bridge.pem`. Give container UID/GID 1654 read access to these files and write access to `local/state`; keep the private key and state private.
 3. Build and start: `docker compose -f deploy/compose.yaml up --build`. The default listener is `127.0.0.1:1993`. For remote Paperless, set `ListenAddress` to an appropriate host address and restrict the firewall to Paperless. This is an experimental foreground service with no automatic restart.
-4. Configure Paperless as below and run the [disposable validation procedure](docs/validation.md). Keep the state directory on persistent local storage and back it up together with the configuration. Run one proxy process against a state directory; multiple replicas are unsupported.
+4. Keep writes disabled until read-only preflight passes and scoped test additions are approved. Configure the isolated Paperless test rule as below and run the [disposable validation procedure](docs/validation.md). Keep the state directory on persistent local storage and back it up together with the configuration. Run one proxy process against a state directory; multiple replicas are unsupported.
 
 For a local disposable proxy certificate, for example (replace `proxy.example.test` with the actual hostname):
 
@@ -83,13 +88,21 @@ for Kubernetes HTTP probes. Native installations can use the same command or que
 
 ## Configuration and trust
 
-See [config.example.json](deploy/config.example.json) for every field. `BridgeTls` accepts only `StartTls` or `SslOnConnect`; neither permits plaintext fallback. `BridgeTrust` is an optional path to **one PEM trust anchor**, typically Bridge's exported self-signed certificate. When absent, system trust applies. A custom anchor retains hostname, certificate validity and chain verification. Local Bridge certificate revocation is disabled because its generated certificates have no revocation service. Custom-chain downloads are disabled. Certificate/key paths are local files, never certificate material in JSON.
+See [config.example.json](deploy/config.example.json) for every field. JSON property names are case-sensitive and unknown names are rejected; processed-label names must use ASCII letters, digits, dots, hyphens or underscores because Paperless emits a bare STORE parameter. `BridgeTls` accepts only `StartTls` or `SslOnConnect`; neither permits plaintext fallback. `BridgeTrust` is an optional path to **one PEM trust anchor**, typically Bridge's exported self-signed certificate. When absent, system trust applies. A custom anchor retains hostname, certificate validity and chain verification. Local Bridge certificate revocation is disabled because its generated certificates have no revocation service. Custom-chain downloads are disabled. Certificate/key paths are local files, never certificate material in JSON.
 
 Bridge stores its default certificate/key in its vault; current upstream also supports custom PEM paths. It can fall back to its vault certificate if those files fail to load. After replacement, re-export and review its public certificate and update trust; do not disable verification. New upstream sessions reload the trust file; restart the proxy to reload its listener certificate/key. Sharing Bridge's certificate as the listener certificate is optional, requires valid hostname SANs and private-key handling, and is not the example's design. [Upstream certificate code](https://github.com/ProtonMail/proton-bridge/blob/master/internal/vault/certs.go).
 
 The proxy sees Bridge credentials and decrypted emails. Its allowed commands restrict normal client operations, but its underlying credentials can access the account. PDF/Inbox filters are not a mailbox access boundary. No credential/content/protocol logging, telemetry or external service is implemented. State files contain account-scoped hashes, UIDs, UIDVALIDITY and message fingerprints; protect them as sensitive metadata. Runtime network use is client IMAP, configured Bridge IMAP, and local HTTP health probes. Build tools fetch packages/images separately.
 
-Defaults cap connections at 8, command frames at 64 KiB, literals at 16 KiB, nesting at 24, message reads at 32 MiB and each scanned mailbox at 10,000 messages. The 300-second timeout covers the entire connection. Membership searches currently rescan full INBOX and label messages sequentially; this is an intentionally conservative prototype with substantial cost on large mailboxes. Raise configured limits only after measuring disposable workloads. MailKit may buffer fetched data before the application's message-size check.
+Defaults cap connections at 8, command frames at 64 KiB, command literals at 16 KiB,
+parenthesis/boolean nesting at 24, search terms at 256, message reads at 32 MiB,
+combined scan bytes at 256 MiB, and each mailbox at 10,000 messages. The 300-second
+timeout covers the entire connection. MailKit's folder stream hook rejects oversized
+body literals before buffering; fingerprints are hashed directly from bounded
+streams. Known COPYUID mappings avoid reading unrelated Inbox bodies; unknown label
+memberships and pending copies require a full ambiguity scan, still within the
+budget. Large mailboxes can require deliberate count/scan limit adjustment. Corrupt,
+unknown-schema or oversized journals fail closed.
 
 ## Verification and releases
 
@@ -104,7 +117,7 @@ Without `PAPERLESS_TEST_PYTHON`, the Python client test is explicitly skipped; t
 The process recovery suite launches the actual proxy executable against the synthetic
 Bridge fixture, abruptly kills only that child at COPY barriers, and restarts it
 with the same journal. It verifies safe retry before an intent is persisted,
-blocked uncertain outcomes, unique-message recovery, identical-delivery ambiguity,
+blocked uncertain outcomes, explicit experimental unique-byte recovery, identical-delivery ambiguity,
 concurrent workers after restart, and rejection of reused UIDs after UIDVALIDITY
 changes. Run it independently with:
 
@@ -116,6 +129,16 @@ See [recovery test boundaries](docs/protocol.md#process-recovery-tests) for expe
 outcomes and limitations. No production fault hooks or real account are required.
 
 The [build workflow](.github/workflows/build.yml) restores locked NuGet dependencies, runs all tests, publishes a review artifact and builds the container. It has no registry credentials, automatic publish or deployment step. Follow the [release checklist](docs/validation.md#review-and-release) before calling a build compatible with official Bridge. Dependency versions and container base digests are pinned; review updates deliberately.
+
+## Candidate artifacts
+
+From a clean checkout, set `PAPERLESS_TEST_PYTHON` to the prepared test interpreter and run `bash scripts/build-candidate.sh`. The script restores locked dependencies, runs style/full test checks, publishes and performs an isolated no-network container smoke test before packaging. GNU tar, gzip, OpenSSL and Docker are required on the Linux build host.
+It produces versioned portable and Docker image archives, license notices, the
+controlled-test MIME fixture, a build manifest, dependency-audit JSON and SHA-256
+checksums in `artifacts/`. The image archive can be loaded with `docker load -i`;
+the portable archive includes an image-only Compose file and the test runbook.
+CI uses the same script and uploads review artifacts. Nothing is pushed to a
+registry, tagged as a stable release or deployed automatically.
 
 ## C# style checks
 

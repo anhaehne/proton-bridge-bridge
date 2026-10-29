@@ -3,7 +3,7 @@ services:
   imap-proxy:
     build:
       context: ..
-    image: proton-bridge-bridge:dev
+    image: proton-bridge-bridge:0.1.0-rc.1
     network_mode: host
     restart: "no" # Experimental disposable-account validation only.
     healthcheck:

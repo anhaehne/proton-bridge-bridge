@@ -6,9 +6,11 @@ namespace ProtonBridgeBridge;
 public static class BridgeConnection
 {
     /// <summary>Creates a credential-free client with the same TLS policy for sessions and health probes.</summary>
-    public static ImapClient Create(Options options)
+    public static ImapClient Create(Options options) => Create(options, new FetchBudget(options.MaxMessageBytes));
+
+    internal static ImapClient Create(Options options, FetchBudget budget)
     {
-        var client = new ImapClient
+        var client = new BoundedImapClient(budget)
         {
             Timeout = 60000,
             CheckCertificateRevocation = false

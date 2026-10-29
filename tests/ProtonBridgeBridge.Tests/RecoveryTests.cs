@@ -5,20 +5,24 @@ namespace ProtonBridgeBridge.Tests;
 public class RecoveryTests
 {
     [Theory]
-    [InlineData(CopyCheckpoint.BeforeIntent, false)]
-    [InlineData(CopyCheckpoint.BeforeIntent, true)]
-    [InlineData(CopyCheckpoint.BeforeRemoteCopy, false)]
-    [InlineData(CopyCheckpoint.BeforeRemoteCopy, true)]
-    [InlineData(CopyCheckpoint.AfterRemoteCopy, false)]
-    [InlineData(CopyCheckpoint.AfterRemoteCopy, true)]
-    [InlineData(CopyCheckpoint.BeforeJournalCommit, false)]
-    [InlineData(CopyCheckpoint.BeforeJournalCommit, true)]
+    [InlineData(CopyCheckpoint.BeforeIntent, false, true)]
+    [InlineData(CopyCheckpoint.BeforeIntent, true, true)]
+    [InlineData(CopyCheckpoint.BeforeRemoteCopy, false, true)]
+    [InlineData(CopyCheckpoint.BeforeRemoteCopy, true, true)]
+    [InlineData(CopyCheckpoint.AfterRemoteCopy, false, true)]
+    [InlineData(CopyCheckpoint.AfterRemoteCopy, true, true)]
+    [InlineData(CopyCheckpoint.BeforeJournalCommit, false, true)]
+    [InlineData(CopyCheckpoint.BeforeJournalCommit, true, true)]
+    [InlineData(CopyCheckpoint.AfterRemoteCopy, false, false)]
+    [InlineData(CopyCheckpoint.BeforeJournalCommit, false, false)]
     public async Task AbruptExitAtCopyBoundaryRecoversOrBlocksWithoutDuplicateCopyAsync(
         CopyCheckpoint checkpoint,
-        bool identicalDeliveries)
+        bool identicalDeliveries,
+        bool allowHashFallback)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         await using var fixture = await RecoveryFixture.StartAsync(identicalDeliveries, timeout.Token);
+        await fixture.ConfigureAsync(fixture.Settings with { AllowHashFallback = allowHashFallback }, timeout.Token);
         var barrier = new CopyBarrier(checkpoint);
         fixture.Stock.CheckpointAsync = barrier.ReachAsync;
         var original = await fixture.StartProxyAsync(timeout.Token);
@@ -54,7 +58,7 @@ public class RecoveryTests
         await using var client = await fixture.ConnectAsync(timeout.Token);
         Assert.Contains("b OK", await client.CommandAsync("b SELECT INBOX", timeout.Token));
 
-        var canRecover = checkpoint == CopyCheckpoint.BeforeIntent || remoteCopySucceeded && !identicalDeliveries;
+        var canRecover = checkpoint == CopyCheckpoint.BeforeIntent || remoteCopySucceeded && !identicalDeliveries && allowHashFallback;
         var store = await client.CommandAsync("c UID STORE 7 +X-GM-LABELS Paperless-imported", timeout.Token);
         Assert.Contains(canRecover ? "c OK" : "c NO", store);
         var search = await client.CommandAsync(

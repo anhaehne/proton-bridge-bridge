@@ -14,6 +14,9 @@ public sealed record ListValue(IReadOnlyList<ImapValue> Values) : ImapValue;
 // nested lists and atoms. Never split protocol input on whitespace or use regex substitutions.
 public sealed class ImapReader(Stream stream)
 {
+    private readonly byte[] _buffer = new byte[4096];
+    private int _position;
+    private int _length;
     private int _consumed;
 
     private async Task<int> ReadAsync(CancellationToken ct)
@@ -23,8 +26,17 @@ public sealed class ImapReader(Stream stream)
             throw new ImapSyntaxException();
         }
 
-        var b = new byte[1];
-        return await stream.ReadAsync(b, ct) == 0 ? -1 : b[0];
+        if (_position == _length)
+        {
+            _length = await stream.ReadAsync(_buffer, ct);
+            _position = 0;
+            if (_length == 0)
+            {
+                return -1;
+            }
+        }
+
+        return _buffer[_position++];
     }
 
     public async Task<IReadOnlyList<ImapValue>?> ReadCommandAsync(CancellationToken ct)
@@ -147,7 +159,7 @@ public sealed class ImapReader(Stream stream)
                 }
                 else
                 {
-                    while (c > 32 && c is not ('(' or ')' or '{' or '"'))
+                    while (c > 32 && c != 127 && c is not ('(' or ')' or '{' or '"'))
                     {
                         bytes.Add((byte)c);
                         c = await ReadAsync(ct);

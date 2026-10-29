@@ -4,6 +4,8 @@
 
 The C# solution, TLS fixture suite and pinned Python imap-tools client test run locally. The Docker image builds from digest-pinned official .NET SDK and ASP.NET Core runtime bases. HTTP health tests cover readiness, dependency failure, hostname verification, credential-free probing and graceful shutdown. Process-level recovery tests kill the real proxy against a synthetic upstream before/after COPY, retain its journal, and verify safe recovery or blocking after restart; they also cover concurrent identical deliveries and UIDVALIDITY reuse. No official Bridge instance, live Proton account, Paperless worker, OCR pipeline or Kubernetes deployment has been tested. The user confirmed that no disposable Proton account is currently available. This gate remains pending; do not describe synthetic tests as a live Bridge proof.
 
+The first-test candidate and exact operator steps are in [first-production-test.md](first-production-test.md). Read-only discovery/preflight can be run before authorizing any label additions. The candidate archives intentionally record `LiveBridgeValidated=false`.
+
 ## Official Bridge prototype
 
 1. Provision a disposable Proton account and an isolated Paperless instance. Install an official, unmodified Bridge release and record its exact version. Sign in and complete 2FA in Bridge, create `Paperless-imported` through Proton, and export only its public TLS certificate to proxy trust. Provide the test host, generated Bridge credentials through the Paperless secret mechanism, and explicit permission for the fixture messages/label. Never submit credentials in an issue, test log or repository.

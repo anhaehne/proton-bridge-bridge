@@ -14,7 +14,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
-  <ItemGroup><None Include="paperless_wire.py" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Include="paperless_wire.py" CopyToOutputDirectory="PreserveNewest" /><None Include="../fixtures/controlled-test.eml" Link="controlled-test.eml" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />

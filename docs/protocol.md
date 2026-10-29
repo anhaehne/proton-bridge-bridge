@@ -47,12 +47,12 @@ account login, COPYUID support, byte stability or successful Paperless ingestion
 | LIST / LSUB | Minimal INBOX-only view for Paperless; not a complete folder listing implementation |
 | UID SEARCH | Boolean groups, NOT/OR, UID, normal read/star/answer/delete/draft/recent flags, date and common text/header terms; configured-label X-GM-LABELS/KEYWORD/UNKEYWORD |
 | UID FETCH | UID, FLAGS, RFC822.SIZE, BODY.PEEK[], configured-label X-GM-LABELS |
-| UID STORE +X-GM-LABELS[.SILENT] | Only the configured label; bare or one-item list; translated to UID COPY |
+| UID STORE +X-GM-LABELS[.SILENT] | Only the configured label with writes explicitly enabled; optional UID/UIDVALIDITY scope; translated to UID COPY |
 | CLOSE / UNSELECT | Local selection release; never expunge |
 
 Other operations return BAD or NO without forwarding mutations. Unknown labels/search keys are rejected instead of returning plausible empty results. General sequence-number FETCH, BODY[] that marks seen, partial/header fetches, IDLE, arbitrary flag STORE, APPEND, CREATE/DELETE/RENAME, MOVE, COPY to client-specified targets, EXPUNGE and label removal are unsupported. The capability advertises only the subset Paperless requires; this is not a full Gmail-compatible server. Use a simple ASCII tag such as `Paperless-imported`: Paperless's bare STORE parameter cannot safely express every label containing whitespace or protocol delimiters.
 
-The IMAP reader parses nested lists, atoms, escaped quoted strings and synchronizing/non-synchronizing octet-counted literals. Commands have bounded size/depth; malformed framing closes the connection. It does not use line splitting or regex to rewrite IMAP. MailKit's mature parser and serializers handle all upstream responses and requests. The frontend parser is project-owned and intentionally small; it needs broader interoperability/fuzz testing before general use.
+The buffered IMAP reader parses nested lists, atoms, escaped quoted strings and synchronizing/non-synchronizing octet-counted literals, including fragmented and pipelined commands. Boolean search depth and total terms are independently bounded. Commands have bounded size/depth; malformed framing closes the connection. It does not use line splitting or regex to rewrite IMAP. MailKit's mature parser and serializers handle all upstream responses and requests. The frontend parser is project-owned and intentionally small; it needs broader interoperability/fuzz testing before general use.
 
 ## Identity and recovery
 
@@ -60,7 +60,7 @@ A UID belongs to a mailbox's UIDVALIDITY epoch, not to an entire account. No ass
 
 For an addition, the proxy serializes membership reconciliation and COPY across all sessions, persists a pending source UID/validity/hash intent, and sends COPY to the pre-existing configured label. UIDPLUS/COPYUID is required **before attempting COPY**. After COPY it reads the returned label UID, verifies byte equality and label UIDVALIDITY, then atomically replaces the journal with the completed mapping. A reconnect reloads the journal, so simultaneous sessions cannot overwrite stale in-memory state. One exclusive state-directory handle prevents multiple processes using the same directory on filesystems supporting normal file sharing locks.
 
-Known COPYUID mappings identify identical deliveries independently. Unexplained label membership can use hashes only when exactly one Inbox message is a candidate. Additional unexplained copies of identical content cause NO, even if one identical delivery already has a known mapping. Existing externally labeled identical deliveries, lost COPYUID responses and ambiguous crash recovery require operator inspection; the proxy never guesses. Known mappings whose octets change also fail. Unique pending copies can reconcile by hash; pending intents without evidence block further additions rather than blindly retrying. An externally removed label makes a known source eligible again.
+Known COPYUID mappings identify identical deliveries independently. Unexplained label membership blocks by default. Only with `AllowHashFallback=true` can hashes be used when exactly one Inbox message is a candidate; this is experimental and cannot prove uniqueness outside the observed Inbox. Additional unexplained copies of identical content cause NO, even if one identical delivery already has a known mapping. Existing externally labeled identical deliveries, lost COPYUID responses and ambiguous crash recovery require operator inspection; the proxy never guesses. Known mappings whose octets change also fail. Unique pending copies can reconcile by hash only with explicit experimental fallback; pending intents without evidence block further additions rather than blindly retrying. An externally removed label makes a known source eligible again.
 
 Files are flushed before rename, supporting process-restart recovery. Filesystem/power-loss guarantees and network/PVC file-lock semantics require deployment-specific validation; this is not a transactional distributed store. A journal failure after a successful remote COPY leaves an uncertain intent. Never discard state while workers can still apply queued actions.
 
@@ -76,15 +76,15 @@ Hash byte stability across folders and Bridge rebuilds remains an open live vali
 verified TLS on both IMAP connections, and retains its real journal across abrupt
 process termination and restart. A barrier in the synthetic upstream freezes a
 command at a specific protocol boundary; no production fault injection is added.
-Tests inspect the on-disk intent before killing the owned child, then verify
+The suite exercises strict defaults and explicit experimental hash fallback. Tests inspect the on-disk intent before killing the owned child, then verify
 membership searches and repeated label additions against the retained remote state.
 
 | Crash boundary | Durable journal | Unique delivery after restart | Identical deliveries after restart |
 | --- | --- | --- | --- |
 | Pre-copy fingerprint fetch, before intent | No mapping | COPY succeeds once | Exact COPYUID identifies only the requested delivery |
 | COPY received, before remote mutation | Pending intent | NO; outcome remains unconfirmed | NO; outcome remains unconfirmed |
-| Remote COPY succeeds, before COPYUID response | Pending intent | Hash reconciliation prevents another COPY | NO; membership is ambiguous |
-| COPYUID received and bytes checked, before final journal commit | Pending intent | Hash reconciliation prevents another COPY | NO; the exact mapping was not persisted |
+| Remote COPY succeeds, before COPYUID response | Pending intent | Strict mode: NO; explicit hash fallback prevents another COPY | NO; membership is ambiguous |
+| COPYUID received and bytes checked, before final journal commit | Pending intent | Strict mode: NO; explicit hash fallback prevents another COPY | NO; the exact mapping was not persisted |
 | Completed mapping persisted | Source/label UIDVALIDITY and COPYUID | Repeated action is idempotent | Concurrent workers preserve independent mappings, including after another restart |
 
 The fixture aborts the paused command after the child has exited, making each
@@ -99,3 +99,29 @@ simulate power loss, torn writes, storage-controller caches, network-filesystem
 locking, eventual consistency in Proton, or a Bridge restart. The live Bridge
 validation gate remains necessary to establish actual COPYUID behavior and raw
 message byte stability.
+
+## Controlled-test guardrails
+
+Candidate 0.1.0-rc.1 defaults to `AllowLabelWrites=false`. A nonempty
+`AllowedWriteUids` list requires its `AllowedWriteUidValidity` when writes are enabled;
+a batch outside that scope is rejected before its first COPY. EXAMINE forbids label
+additions. The independent read-only discovery command searches only a user-supplied
+test-subject prefix and returns UIDs plus UIDVALIDITY; preflight checks bounded raw
+reads and existing label bytes, never COPY or journal writes. Neither command prints
+credentials, subjects, message contents or hashes.
+
+A shared fetch budget checks body-literal lengths in MailKit's supported CreateStream
+override before body buffering. Each body and the combined label/source scan have
+separate limits. Exact COPYUID mappings need only mapped source bodies; unknown
+label UIDs or pending intents require full-source matching for duplicate detection.
+A label-budget exception is preserved even when the upstream disconnects. Journals
+are limited to 16 MiB, reject malformed/unknown entries and duplicate source keys,
+and retain the existing atomic-file/process-restart semantics. Power-loss durability
+and distributed filesystem behavior remain outside the tested guarantees.
+
+Strict identity is the candidate default: untracked label UIDs and pending COPYs
+without persisted target UIDs return CANNOT even if bytes match uniquely in Inbox.
+`AllowHashFallback=true` is required to exercise provisional hash matching; recovery
+tests cover both that opt-in behavior and strict blocking. Known orphaned label copies
+remain accounted for when their source leaves Inbox, preventing an identical new
+arrival from being mistaken for the old source solely because its bytes match.

@@ -3,10 +3,13 @@ using MailKit;
 
 namespace ProtonBridgeBridge;
 
+public sealed class LabelWriteDeniedException : Exception;
+
 public sealed class Session(Stream stream, IBridgeMailbox bridge, Options options, SemaphoreSlim commandLock)
 {
     private const string Capabilities = "IMAP4rev1 AUTH=PLAIN X-GM-EXT-1";
     private InboxState? _selected;
+    private bool _readOnly;
 
     private Task WriteAsync(string value, CancellationToken ct) => stream.WriteAsync(Encoding.UTF8.GetBytes(value), ct).AsTask();
 
@@ -93,6 +96,7 @@ public sealed class Session(Stream stream, IBridgeMailbox bridge, Options option
                         }
 
                         _selected = await bridge.SelectAsync(ct);
+                        _readOnly = command == "EXAMINE";
                         await WriteAsync($"* FLAGS (\\Seen \\Flagged \\Answered \\Deleted \\Draft)\r\n* OK [PERMANENTFLAGS ()] Flags protected\r\n* {_selected.Messages.Count} EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY {_selected.Validity}] UIDs valid\r\n* OK [UIDNEXT {_selected.NextUid}] Next UID\r\n", ct);
                         break;
                     case "STATUS":
@@ -151,6 +155,19 @@ public sealed class Session(Stream stream, IBridgeMailbox bridge, Options option
                 }
 
                 await WriteAsync($"{tag} OK{(command == "SELECT" ? " [READ-WRITE]" : command == "EXAMINE" ? " [READ-ONLY]" : "")} {command} complete\r\n", ct);
+            }
+            catch (LabelWriteDeniedException)
+            {
+                await WriteAsync($"{tag} NO [NOPERM] Label writes are disabled or UID is outside the allowed test scope\r\n", ct);
+            }
+            catch (ResourceLimitException)
+            {
+                await WriteAsync($"{tag} NO [LIMIT] Configured message or scan limit exceeded; reconnect after reviewing limits\r\n", ct);
+                return;
+            }
+            catch (IdentityException)
+            {
+                await WriteAsync($"{tag} NO [CANNOT] Mailbox identity or pending COPY requires operator review\r\n", ct);
             }
             catch (ImapSyntaxException)
             {
@@ -212,6 +229,17 @@ public sealed class Session(Stream stream, IBridgeMailbox bridge, Options option
             if (label != options.Label)
             {
                 throw new ImapSyntaxException();
+            }
+
+            if (_readOnly || !options.AllowLabelWrites || options.AllowedWriteUids.Length > 0
+                && messages.Any(message => !options.AllowedWriteUids.Contains(message.UniqueId.Id)))
+            {
+                throw new LabelWriteDeniedException();
+            }
+
+            if (options.AllowedWriteUids.Length > 0 && current.Validity != options.AllowedWriteUidValidity)
+            {
+                throw new IdentityException();
             }
 
             foreach (var message in messages)

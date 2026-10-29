@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ProtonBridgeBridge;
 
@@ -15,43 +16,49 @@ public static class Identity
     public static string Hash(byte[] raw) => Convert.ToHexString(SHA256.HashData(raw));
 
     public static HashSet<uint> Resolve(uint sourceValidity, uint labelValidity,
-        IReadOnlyList<Fingerprint> source, IReadOnlyList<Fingerprint> labels, IReadOnlyList<Mapping> mappings)
+        IReadOnlyList<Fingerprint> source, IReadOnlyList<Fingerprint> labels, IReadOnlyList<Mapping> mappings, bool allowHashFallback = false)
     {
         var result = new HashSet<uint>();
         var accountedLabels = new HashSet<uint>();
         foreach (var map in mappings.Where(m => m.SourceValidity == sourceValidity && m.LabelValidity == labelValidity))
         {
-            var s = source.SingleOrDefault(s => s.Uid == map.SourceUid);
-            if (s is null)
+            var sourceMessage = source.SingleOrDefault(message => message.Uid == map.SourceUid);
+            var labelMessage = map.LabelUid is { } labelUid ? labels.SingleOrDefault(message => message.Uid == labelUid) : null;
+            if (labelMessage is not null)
             {
-                continue;
-            }
-
-            if (s.Hash != map.Hash)
-            {
-                throw new IdentityException();
-            }
-
-            if (map.LabelUid is { } uid)
-            {
-                var l = labels.SingleOrDefault(l => l.Uid == uid);
-                if (l is null)
-                {
-                    // Label removed externally: source is eligible again.
-                    continue;
-                }
-
-                if (l.Hash != s.Hash)
+                if (labelMessage.Hash != map.Hash)
                 {
                     throw new IdentityException();
                 }
 
-                result.Add(s.Uid);
-                accountedLabels.Add(l.Uid);
+                // A known label copy remains accounted for even after its source leaves Inbox.
+                accountedLabels.Add(labelMessage.Uid);
+            }
+
+            if (sourceMessage is null)
+            {
+                continue;
+            }
+
+            if (sourceMessage.Hash != map.Hash)
+            {
+                throw new IdentityException();
+            }
+
+            if (labelMessage is not null)
+            {
+                result.Add(sourceMessage.Uid);
             }
         }
 
-        foreach (var group in labels.Where(l => !accountedLabels.Contains(l.Uid)).GroupBy(l => l.Hash))
+        var unmatchedLabels = labels.Where(message => !accountedLabels.Contains(message.Uid)).ToArray();
+        if (!allowHashFallback && (unmatchedLabels.Length > 0
+            || mappings.Any(mapping => mapping.SourceValidity == sourceValidity && mapping.LabelUid is null)))
+        {
+            throw new IdentityException();
+        }
+
+        foreach (var group in unmatchedLabels.GroupBy(message => message.Hash))
         {
             var candidates = source.Where(s => s.Hash == group.Key).ToArray();
             if (candidates.Length > 1)
@@ -80,6 +87,7 @@ public static class Identity
 
 public sealed class Journal
 {
+    private const int MaxJournalBytes = 16 * 1024 * 1024;
     private readonly string _path;
 
     public List<Mapping> Entries { get; private set; }
@@ -89,7 +97,8 @@ public sealed class Journal
         Directory.CreateDirectory(directory);
         var key = Identity.Hash(Encoding.UTF8.GetBytes(endpoint + "\0" + account + "\0" + label));
         _path = Path.Combine(directory, key + ".json");
-        Entries = File.Exists(_path) ? JsonSerializer.Deserialize<List<Mapping>>(File.ReadAllText(_path)) ?? throw new InvalidDataException() : [];
+        Entries = [];
+        Reload();
     }
 
     public void ValidateEpoch(uint validity)
@@ -110,17 +119,69 @@ public sealed class Journal
         file.Flush(true);
     }
 
-    public void Reload() => Entries = File.Exists(_path) ? JsonSerializer.Deserialize<List<Mapping>>(File.ReadAllText(_path)) ?? throw new InvalidDataException() : [];
+    public void Reload()
+    {
+        if (!File.Exists(_path))
+        {
+            Entries = [];
+            return;
+        }
+
+        try
+        {
+            using var file = File.OpenRead(_path);
+            if (file.Length > MaxJournalBytes)
+            {
+                throw new IdentityException();
+            }
+
+            var entries = JsonSerializer.Deserialize<List<Mapping>>(file, new JsonSerializerOptions
+            {
+                UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+            }) ?? throw new IdentityException();
+            foreach (var entry in entries)
+            {
+                Validate(entry);
+            }
+
+            if (entries.Select(entry => (entry.SourceValidity, entry.SourceUid)).Distinct().Count() != entries.Count)
+            {
+                throw new IdentityException();
+            }
+
+            Entries = entries;
+        }
+        catch (JsonException)
+        {
+            throw new IdentityException();
+        }
+    }
+
+    private static void Validate(Mapping? entry)
+    {
+        if (entry is null || entry.SourceValidity == 0 || entry.SourceUid == 0 || entry.LabelValidity == 0 || entry.LabelUid == 0
+            || entry.Hash is null || entry.Hash.Length != 64 || !entry.Hash.All(Uri.IsHexDigit))
+        {
+            throw new IdentityException();
+        }
+    }
 
     public void Save(Mapping entry)
     {
+        Validate(entry);
         Reload();
         Entries.RemoveAll(m => m.SourceValidity == entry.SourceValidity && m.SourceUid == entry.SourceUid);
         Entries.Add(entry);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(Entries);
+        if (bytes.Length > MaxJournalBytes)
+        {
+            throw new IdentityException();
+        }
+
         var temp = _path + ".tmp";
         using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            JsonSerializer.Serialize(file, Entries);
+            file.Write(bytes);
             file.Flush(true);
         }
 

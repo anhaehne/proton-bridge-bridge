@@ -1,6 +1,6 @@
 # Proton Bridge compatibility proxy
 
-Experimental C#/.NET 10 IMAP adapter for Paperless-ngx and **official, unmodified Proton Mail Bridge**. MailKit handles upstream IMAP, authentication, MIME octets and TLS; a bounded recursive-descent IMAP parser handles the deliberately small downstream command surface. No Proton login, 2FA, decryption or update code is included.
+Experimental C#/ASP.NET Core 10 IMAP adapter for Paperless-ngx and **official, unmodified Proton Mail Bridge**. MailKit handles upstream IMAP, authentication, MIME octets and TLS; a bounded recursive-descent IMAP parser handles the deliberately small downstream command surface. ASP.NET Core hosts the IMAP listener as a background service and supplies HTTP health endpoints. No Proton login, 2FA, decryption or update code is included.
 
 **State:** implemented and tested with synthetic TLS IMAP fixtures and Paperless 3.3.4's exact `imap-tools` 1.15.0 client dependency. Not tested against official Bridge or a running Paperless consumer. No real account, deployment or production release has been used. The executable requires `--experimental`; use disposable accounts until the [live validation gate](docs/validation.md) passes.
 
@@ -41,7 +41,7 @@ Paperless controls MIME recognition and document consumption; the proxy supplies
 
 ## Native and Kubernetes
 
-Native: install the pinned SDK, then run:
+Native: install the pinned SDK to build and the ASP.NET Core 10 runtime to run the published app, then run:
 
 ```sh
 DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet restore --locked-mode
@@ -50,9 +50,36 @@ DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet publish src/ProtonBridgeProxy -c Release --
 dotnet artifacts/proxy/ProtonBridgeProxy.dll --experimental local/config.json
 ```
 
-Run as an unprivileged user alongside Bridge. Supervise it with your normal service manager after the validation gate. Stop it with SIGINT; service termination drops connections without expunging messages.
+Run as an unprivileged user alongside Bridge. Supervise it with your normal service manager after the validation gate. Stop it with SIGINT or SIGTERM; the ASP.NET Core host cancels active sessions and closes connections without expunging messages.
 
-Kubernetes: [kubernetes.example.yaml](deploy/kubernetes.example.yaml) is a **template requiring edits**, not a deployment destination. Merge the proxy container into the Pod already running official Bridge so both share localhost. Preserve Bridge's own installation and secret mounts; the proxy gets only its certificate/key, Bridge's public trust certificate, config and a persistent state volume. Set `ListenAddress=0.0.0.0`, issue the proxy certificate for its Service DNS, and configure Paperless to verify that name. Use one replica with Recreate, an image digest from the reviewed build, and a NetworkPolicy admitting TCP/1993 only from Paperless. Apply your cluster's existing namespace/PVC/Secret conventions. There is no supplied Bridge image or live manifest change.
+Kubernetes: [kubernetes.example.yaml](deploy/kubernetes.example.yaml) is a **template requiring edits**, not a deployment destination. Merge the proxy container into the Pod already running official Bridge so both share localhost. Preserve Bridge's own installation and secret mounts; the proxy gets only its certificate/key, Bridge's public trust certificate, config and a persistent state volume. Set `ListenAddress=0.0.0.0` and `HealthListenAddress=0.0.0.0` for Pod probes, issue the proxy certificate for its Service DNS, and configure Paperless to verify that name. Use one replica with Recreate, an image digest from the reviewed build, and a NetworkPolicy admitting TCP/1993 only from Paperless. Apply your cluster's existing namespace/PVC/Secret conventions. There is no supplied Bridge image or live manifest change.
+
+## Health checks
+
+The separate HTTP listener defaults to `127.0.0.1:8080`. Configure
+`HealthListenAddress` and `HealthPort` independently from the TLS IMAP listener.
+Choose an unused port on a host-networked installation. Port zero selects an
+ephemeral health port for integration tests; deployment probes need a fixed port.
+
+- `GET /health/live`: HTTP 200 while the ASP.NET Core HTTP host responds; it does
+  not depend on Bridge, so a Bridge outage does not trigger a liveness restart.
+- `GET /health/ready`: HTTP 200 only while the proxy listener is active and Bridge
+  completes a verified-TLS IMAP connection; otherwise HTTP 503. Each probe has a
+  five-second check timeout and disconnects without authenticating or fetching mail.
+
+Responses contain only `Healthy` or `Unhealthy`; exception details and framework
+request logging are disabled. Readiness does not prove that a Proton account is
+logged into Bridge or that mailbox identity/import checks pass. No credentials or
+vault access are needed. Keep this plain HTTP listener on loopback or the private
+probe network; the IMAP connection continues to require TLS.
+
+The image and Compose example use `dotnet ProtonBridgeProxy.dll --healthcheck
+/config/config.json` to query local readiness without curl or extra packages.
+This command starts no listener and returns exit code 0 for healthy, 1 otherwise.
+The Kubernetes template includes separate startup/liveness and readiness probes;
+its Service exposes only IMAP. Configure the health listener on the Pod interface
+for Kubernetes HTTP probes. Native installations can use the same command or query
+`http://127.0.0.1:8080/health/ready` directly.
 
 ## Configuration and trust
 
@@ -60,7 +87,7 @@ See [config.example.json](deploy/config.example.json) for every field. `BridgeTl
 
 Bridge stores its default certificate/key in its vault; current upstream also supports custom PEM paths. It can fall back to its vault certificate if those files fail to load. After replacement, re-export and review its public certificate and update trust; do not disable verification. New upstream sessions reload the trust file; restart the proxy to reload its listener certificate/key. Sharing Bridge's certificate as the listener certificate is optional, requires valid hostname SANs and private-key handling, and is not the example's design. [Upstream certificate code](https://github.com/ProtonMail/proton-bridge/blob/master/internal/vault/certs.go).
 
-The proxy sees Bridge credentials and decrypted emails. Its allowed commands restrict normal client operations, but its underlying credentials can access the account. PDF/Inbox filters are not a mailbox access boundary. No credential/content/protocol logging, telemetry or external service is implemented. State files contain account-scoped hashes, UIDs, UIDVALIDITY and message fingerprints; protect them as sensitive metadata. Runtime network use is client IMAP and configured Bridge IMAP. Build tools fetch packages/images separately.
+The proxy sees Bridge credentials and decrypted emails. Its allowed commands restrict normal client operations, but its underlying credentials can access the account. PDF/Inbox filters are not a mailbox access boundary. No credential/content/protocol logging, telemetry or external service is implemented. State files contain account-scoped hashes, UIDs, UIDVALIDITY and message fingerprints; protect them as sensitive metadata. Runtime network use is client IMAP, configured Bridge IMAP, and local HTTP health probes. Build tools fetch packages/images separately.
 
 Defaults cap connections at 8, command frames at 64 KiB, literals at 16 KiB, nesting at 24, message reads at 32 MiB and each scanned mailbox at 10,000 messages. The 300-second timeout covers the entire connection. Membership searches currently rescan full INBOX and label messages sequentially; this is an intentionally conservative prototype with substantial cost on large mailboxes. Raise configured limits only after measuring disposable workloads. MailKit may buffer fetched data before the application's message-size check.
 

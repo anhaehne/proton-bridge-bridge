@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
@@ -30,8 +29,7 @@ public interface IBridgeMailbox : IAsyncDisposable
 
 public sealed class BridgeMailbox(Options options) : IBridgeMailbox
 {
-    private readonly ImapClient _client = new() { Timeout = 60000, CheckCertificateRevocation = false };
-    private X509Certificate2? _root;
+    private readonly ImapClient _client = BridgeConnection.Create(options);
     private Journal? _journal;
 
     public bool Authenticated => _client.IsAuthenticated;
@@ -41,12 +39,6 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
         if (Authenticated)
         {
             throw new InvalidOperationException();
-        }
-
-        if (options.BridgeTrust is { } file)
-        {
-            _root = X509Certificate2.CreateFromPem(File.ReadAllText(file));
-            _client.ServerCertificateValidationCallback = (_, cert, _, errors) => Trust.Validate(cert, errors, _root);
         }
 
         await _client.ConnectAsync(options.BridgeHost, options.BridgePort, options.SocketOptions, ct);
@@ -217,7 +209,6 @@ public sealed class BridgeMailbox(Options options) : IBridgeMailbox
         finally
         {
             _client.Dispose();
-            _root?.Dispose();
         }
     }
 }

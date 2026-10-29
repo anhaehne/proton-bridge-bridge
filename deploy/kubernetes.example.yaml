@@ -27,6 +27,25 @@ spec:
           ports:
             - name: imaps
               containerPort: 1993
+            - name: health
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 7
           securityContext:
             runAsNonRoot: true
             runAsUser: 1654

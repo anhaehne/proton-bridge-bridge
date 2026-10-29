@@ -27,6 +27,15 @@ Actual charset and additional SINCE/FROM/TO/SUBJECT/BODY terms depend on the rul
 
 The [original report](https://github.com/paperless-ngx/paperless-ngx/discussions/12133) dates to 21 February 2026. [Gluon #450](https://github.com/ProtonMail/gluon/pull/450) and [Bridge #521](https://github.com/ProtonMail/proton-bridge/pull/521) remain open. Gluon is a synchronization server rather than a drop-in proxy and the proposed extension is opt-in. [proton-mail-mcp's documented label operation](https://github.com/sethbang/proton-mail-mcp#update_message_labels) corroborates additive COPY to `Labels/<name>`; that project's Message-ID-based removal is not used here. These are design evidence, not proof of behavior in the installed official Bridge version.
 
+## HTTP health surface
+
+ASP.NET Core runs the IMAP listener as a hosted background service, preserving its
+separate TLS protocol. `/health/live` tests the HTTP host independently of Bridge;
+`/health/ready` requires an active IMAP listener and a verified-TLS Bridge connection.
+Health probes never authenticate or access messages. They report only status, with
+no dependency exception text or framework request logging. Readiness cannot establish
+account login, COPYUID support, byte stability or successful Paperless ingestion.
+
 ## Allowed command surface
 
 | Downstream command | Behavior |

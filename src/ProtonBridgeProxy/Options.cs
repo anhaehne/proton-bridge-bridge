@@ -8,6 +8,8 @@ public sealed record Options
 {
     public string ListenAddress { get; init; } = "127.0.0.1";
     public int ListenPort { get; init; } = 1993;
+    public string HealthListenAddress { get; init; } = "127.0.0.1";
+    public int HealthPort { get; init; } = 8080;
     public required string Certificate { get; init; }
     public required string PrivateKey { get; init; }
     public string BridgeHost { get; init; } = "localhost";
@@ -24,6 +26,7 @@ public sealed record Options
     public void Validate()
     {
         if (BridgeTls is not ("StartTls" or "SslOnConnect") || ListenPort is < 1 or > 65535 || BridgePort is < 1 or > 65535
+            || HealthPort is < 0 or > 65535
             || string.IsNullOrWhiteSpace(Label) || Label.StartsWith('\\') || Label.Any(char.IsControl)
             || MaxConnections < 1 || MaxMessageBytes < 1 || MaxMailboxMessages < 1 || SessionTimeoutSeconds < 1)
         {

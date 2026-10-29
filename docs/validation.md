@@ -2,7 +2,7 @@
 
 ## Current evidence
 
-The C# solution, TLS fixture suite and pinned Python imap-tools client test run locally. The Docker image builds from digest-pinned official .NET bases. No official Bridge instance, live Proton account, Paperless worker, OCR pipeline or Kubernetes deployment has been tested. The user confirmed that no disposable Proton account is currently available. This gate remains pending; do not describe synthetic tests as a live Bridge proof.
+The C# solution, TLS fixture suite and pinned Python imap-tools client test run locally. The Docker image builds from digest-pinned official .NET SDK and ASP.NET Core runtime bases. HTTP health tests cover readiness, dependency failure, hostname verification, credential-free probing and graceful shutdown. No official Bridge instance, live Proton account, Paperless worker, OCR pipeline or Kubernetes deployment has been tested. The user confirmed that no disposable Proton account is currently available. This gate remains pending; do not describe synthetic tests as a live Bridge proof.
 
 ## Official Bridge prototype
 

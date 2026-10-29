@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed class ProxyReadinessCheck(Options options, ProxyListenerState state) : IHealthCheck
 {

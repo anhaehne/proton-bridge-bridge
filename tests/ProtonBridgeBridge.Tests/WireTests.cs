@@ -4,9 +4,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using ProtonBridgeProxy;
+using ProtonBridgeBridge;
 
-namespace ProtonBridgeProxy.Tests;
+namespace ProtonBridgeBridge.Tests;
 
 public class WireTests
 {

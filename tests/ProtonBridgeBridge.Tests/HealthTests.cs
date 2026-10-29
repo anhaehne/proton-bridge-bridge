@@ -4,9 +4,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using ProtonBridgeProxy;
+using ProtonBridgeBridge;
 
-namespace ProtonBridgeProxy.Tests;
+namespace ProtonBridgeBridge.Tests;
 
 public class HealthTests
 {

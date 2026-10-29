@@ -1,9 +1,9 @@
 using System.Text.Json;
-using ProtonBridgeProxy;
+using ProtonBridgeBridge;
 
 if (args.Length != 2 || args[0] is not ("--experimental" or "--healthcheck"))
 {
-    Console.Error.WriteLine("Usage: ProtonBridgeProxy --experimental config.json | --healthcheck config.json (disposable accounts only; stock Bridge validation pending)");
+    Console.Error.WriteLine("Usage: ProtonBridgeBridge --experimental config.json | --healthcheck config.json (disposable accounts only; stock Bridge validation pending)");
     return 2;
 }
 

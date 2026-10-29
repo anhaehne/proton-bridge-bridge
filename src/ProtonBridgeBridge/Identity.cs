@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed class IdentityException : Exception;
 

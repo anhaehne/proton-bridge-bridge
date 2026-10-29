@@ -1,4 +1,4 @@
-# Proton Bridge compatibility proxy
+# ProtonBridgeBridge
 
 Experimental C#/ASP.NET Core 10 IMAP adapter for Paperless-ngx and **official, unmodified Proton Mail Bridge**. MailKit handles upstream IMAP, authentication, MIME octets and TLS; a bounded recursive-descent IMAP parser handles the deliberately small downstream command surface. ASP.NET Core hosts the IMAP listener as a background service and supplies HTTP health endpoints. No Proton login, 2FA, decryption or update code is included.
 
@@ -45,9 +45,9 @@ Native: install the pinned SDK to build and the ASP.NET Core 10 runtime to run t
 
 ```sh
 DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet restore --locked-mode
-DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet publish src/ProtonBridgeProxy -c Release --no-restore -o artifacts/proxy
+DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet publish src/ProtonBridgeBridge -c Release --no-restore -o artifacts/ProtonBridgeBridge
 # Adjust all file paths and permissions in local/config.json for this host.
-dotnet artifacts/proxy/ProtonBridgeProxy.dll --experimental local/config.json
+dotnet artifacts/ProtonBridgeBridge/ProtonBridgeBridge.dll --experimental local/config.json
 ```
 
 Run as an unprivileged user alongside Bridge. Supervise it with your normal service manager after the validation gate. Stop it with SIGINT or SIGTERM; the ASP.NET Core host cancels active sessions and closes connections without expunging messages.
@@ -73,7 +73,7 @@ logged into Bridge or that mailbox identity/import checks pass. No credentials o
 vault access are needed. Keep this plain HTTP listener on loopback or the private
 probe network; the IMAP connection continues to require TLS.
 
-The image and Compose example use `dotnet ProtonBridgeProxy.dll --healthcheck
+The image and Compose example use `dotnet ProtonBridgeBridge.dll --healthcheck
 /config/config.json` to query local readiness without curl or extra packages.
 This command starts no listener and returns exit code 0 for healthy, 1 otherwise.
 The Kubernetes template includes separate startup/liveness and readiness probes;

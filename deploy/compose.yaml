@@ -3,11 +3,11 @@ services:
   imap-proxy:
     build:
       context: ..
-    image: proton-bridge-proxy:dev
+    image: proton-bridge-bridge:dev
     network_mode: host
     restart: "no" # Experimental disposable-account validation only.
     healthcheck:
-      test: [CMD, dotnet, ProtonBridgeProxy.dll, --healthcheck, /config/config.json]
+      test: [CMD, dotnet, ProtonBridgeBridge.dll, --healthcheck, /config/config.json]
       interval: 30s
       timeout: 10s
       start_period: 10s

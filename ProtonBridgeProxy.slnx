@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/ProtonBridgeProxy/ProtonBridgeProxy.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/ProtonBridgeProxy.Tests/ProtonBridgeProxy.Tests.csproj" />
-  </Folder>
-</Solution>

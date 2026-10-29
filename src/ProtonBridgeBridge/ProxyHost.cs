@@ -2,7 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public static class ProxyHost
 {

@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public static class HealthProbe
 {

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed class ImapSyntaxException : Exception;
 

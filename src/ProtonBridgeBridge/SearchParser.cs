@@ -2,7 +2,7 @@ using System.Globalization;
 using MailKit;
 using MailKit.Search;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed class SearchParser(string label, IReadOnlyCollection<uint> processed, uint maxUid = uint.MaxValue)
 {

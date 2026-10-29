@@ -2,7 +2,7 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed record InboxState(uint Validity, uint NextUid, IReadOnlyList<IMessageSummary> Messages);
 

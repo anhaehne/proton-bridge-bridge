@@ -25,9 +25,9 @@ jobs:
       - run: dotnet test -c Release --no-restore
         env:
           PAPERLESS_TEST_PYTHON: python
-      - run: dotnet publish src/ProtonBridgeProxy -c Release --no-restore -o artifacts/proxy /p:UseAppHost=false
-      - run: docker build -t proton-bridge-proxy:test .
+      - run: dotnet publish src/ProtonBridgeBridge -c Release --no-restore -o artifacts/ProtonBridgeBridge /p:UseAppHost=false
+      - run: docker build -t proton-bridge-bridge:test .
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: proxy-review-build
-          path: artifacts/proxy
+          name: ProtonBridgeBridge-review-build
+          path: artifacts/ProtonBridgeBridge

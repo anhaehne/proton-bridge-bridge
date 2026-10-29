@@ -1,7 +1,7 @@
 using System.Text;
 using MailKit;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public sealed class Session(Stream stream, IBridgeMailbox bridge, Options options, SemaphoreSlim commandLock)
 {
@@ -31,7 +31,7 @@ public sealed class Session(Stream stream, IBridgeMailbox bridge, Options option
     public async Task RunAsync(CancellationToken ct)
     {
         var reader = new ImapReader(stream);
-        await WriteAsync("* OK [CAPABILITY " + Capabilities + "] Proton Bridge compatibility prototype\r\n", ct);
+        await WriteAsync("* OK [CAPABILITY " + Capabilities + "] ProtonBridgeBridge experimental IMAP proxy\r\n", ct);
         while (!ct.IsCancellationRequested)
         {
             var values = await reader.ReadCommandAsync(ct);

@@ -1,7 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using MailKit.Net.Imap;
 
-namespace ProtonBridgeProxy;
+namespace ProtonBridgeBridge;
 
 public static class BridgeConnection
 {

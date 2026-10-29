@@ -1,7 +1,7 @@
 using System.Text;
-using ProtonBridgeProxy;
+using ProtonBridgeBridge;
 
-namespace ProtonBridgeProxy.Tests;
+namespace ProtonBridgeBridge.Tests;
 
 public class ParserTests
 {

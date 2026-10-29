@@ -20,6 +20,8 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --require-hashes -r tests/requirements.txt
       - run: dotnet restore --locked-mode
+      - run: dotnet format --no-restore --verify-no-changes
+      - run: dotnet format style --no-restore --verify-no-changes --diagnostics IDE0011
       - run: dotnet test -c Release --no-restore
         env:
           PAPERLESS_TEST_PYTHON: python

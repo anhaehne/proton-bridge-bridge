@@ -75,3 +75,17 @@ PAPERLESS_TEST_PYTHON=/tmp/proxy-wire-tests/bin/python dotnet test -c Release
 Without `PAPERLESS_TEST_PYTHON`, the Python client test is explicitly skipped; the C# parser, identity and verified-TLS integration suite still runs. The Python test exercises the actual pinned imap-tools commands with synthetic inline PDF messages, including read/star flags and identical deliveries. It does **not** start Paperless, OCR, its task queue, or official Bridge.
 
 The [build workflow](.github/workflows/build.yml) restores locked NuGet dependencies, runs all tests, publishes a review artifact and builds the container. It has no registry credentials, automatic publish or deployment step. Follow the [release checklist](docs/validation.md#review-and-release) before calling a build compatible with official Bridge. Dependency versions and container base digests are pinned; review updates deliberately.
+
+## C# style checks
+
+Follow [AGENTS.md](AGENTS.md) and `.editorconfig`. Apply formatting with
+`dotnet format --no-restore`. Before committing C# changes, run:
+
+```sh
+dotnet format --no-restore --verify-no-changes
+dotnet format style --no-restore --verify-no-changes --diagnostics IDE0011
+```
+
+The second command verifies braces on control-flow bodies. Review logical grouping,
+comment placement and async cancellation manually, then run the full verification
+suite above. Style refactors must preserve behavior.

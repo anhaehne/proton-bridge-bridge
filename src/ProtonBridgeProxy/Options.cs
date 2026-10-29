@@ -20,13 +20,17 @@ public sealed record Options
     public int MaxMailboxMessages { get; init; } = 10000;
     public int MaxConnections { get; init; } = 8;
     public int SessionTimeoutSeconds { get; init; } = 300;
+
     public void Validate()
     {
-        if (BridgeTls is not ("StartTls" or "SslOnConnect") || ListenPort is < 1 or > 65535 || BridgePort is < 1 or > 65535 ||
-            string.IsNullOrWhiteSpace(Label) || Label.StartsWith('\\') || Label.Any(char.IsControl) ||
-            MaxConnections < 1 || MaxMessageBytes < 1 || MaxMailboxMessages < 1 || SessionTimeoutSeconds < 1)
+        if (BridgeTls is not ("StartTls" or "SslOnConnect") || ListenPort is < 1 or > 65535 || BridgePort is < 1 or > 65535
+            || string.IsNullOrWhiteSpace(Label) || Label.StartsWith('\\') || Label.Any(char.IsControl)
+            || MaxConnections < 1 || MaxMessageBytes < 1 || MaxMailboxMessages < 1 || SessionTimeoutSeconds < 1)
+        {
             throw new InvalidDataException("Invalid proxy configuration.");
+        }
     }
+
     public SecureSocketOptions SocketOptions => Enum.Parse<SecureSocketOptions>(BridgeTls);
 }
 
@@ -36,11 +40,16 @@ public static class Trust
     public static bool Validate(X509Certificate? certificate, SslPolicyErrors errors, X509Certificate2 root)
     {
         if (certificate is null || (errors & (SslPolicyErrors.RemoteCertificateNameMismatch | SslPolicyErrors.RemoteCertificateNotAvailable)) != 0)
+        {
             return false;
+        }
+
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.Add(root);
-        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck; // Local Bridge certificates have no revocation endpoint.
+
+        // Local Bridge certificates have no revocation endpoint.
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.DisableCertificateDownloads = true;
         using var leaf = new X509Certificate2(certificate);
         return chain.Build(leaf);

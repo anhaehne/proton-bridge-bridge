@@ -10,6 +10,7 @@ public class IdentityTests
         Assert.Equal([7u], Identity.Resolve(1, 2, [new(7, "bytes")], [new(99, "bytes")], []));
         Assert.Empty(Identity.Resolve(1, 2, [new(7, "other")], [new(99, "bytes")], []));
     }
+
     [Fact]
     public void IdenticalDeliveriesRequireExactCopyUidMapping()
     {
@@ -17,9 +18,11 @@ public class IdentityTests
         Fingerprint[] label = [new(99, "same")];
         Assert.Throws<IdentityException>(() => Identity.Resolve(1, 2, inbox, label, []));
         Assert.Equal([7u], Identity.Resolve(1, 2, inbox, label, [new(1, 7, 2, 99, "same")]));
+
         // An extra unexplained label copy cannot safely be assigned to UID 8.
         Assert.Throws<IdentityException>(() => Identity.Resolve(1, 2, inbox, [.. label, new(100, "same")], [new(1, 7, 2, 99, "same")]));
     }
+
     [Fact]
     public void UidValidityResetDiscardsMappingAndFailsOnAmbiguity()
     {
@@ -27,6 +30,7 @@ public class IdentityTests
             [new(7, "same"), new(8, "same")], [new(99, "same")], [new(1, 7, 2, 99, "same")]));
         Assert.Equal([8u], Identity.Resolve(3, 4, [new(8, "same")], [new(100, "same")], [new(1, 7, 2, 99, "same")]));
     }
+
     [Fact]
     public void PendingIntentRecoversUniqueCopyAndBlocksUnresolvedOrAmbiguousCopy()
     {
@@ -35,6 +39,7 @@ public class IdentityTests
         Assert.Throws<IdentityException>(() => Identity.Resolve(1, 2, [new(7, "same")], [], pending));
         Assert.Throws<IdentityException>(() => Identity.Resolve(1, 2, [new(7, "same"), new(8, "same")], [new(99, "same")], pending));
     }
+
     [Fact]
     public void KnownMappingDetectsByteInstabilityAndExternalLabelRemoval()
     {
@@ -42,6 +47,7 @@ public class IdentityTests
         Assert.Throws<IdentityException>(() => Identity.Resolve(1, 2, [new(7, "same")], [new(99, "changed")], maps));
         Assert.Empty(Identity.Resolve(1, 2, [new(7, "same")], [], maps));
     }
+
     [Fact]
     public void EpochSurvivesRestartAndRejectsUidReuse()
     {
@@ -53,8 +59,12 @@ public class IdentityTests
             restarted.ValidateEpoch(10);
             Assert.Throws<IdentityException>(() => restarted.ValidateEpoch(11));
         }
-        finally { Directory.Delete(dir, true); }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
+
     [Fact]
     public void JournalSurvivesRestartAndReloadsOtherSessions()
     {
@@ -69,6 +79,9 @@ public class IdentityTests
             Assert.Equal(2, restarted.Entries.Count);
             Assert.Single(Directory.GetFiles(dir));
         }
-        finally { Directory.Delete(dir, true); }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
 }

@@ -8,19 +8,35 @@ public sealed class SearchParser(string label, IReadOnlyCollection<uint> process
 {
     public SearchQuery Parse(IReadOnlyList<ImapValue> input)
     {
-        int index = 0;
+        var index = 0;
+
         SearchQuery One()
         {
-            if (index >= input.Count) throw new ImapSyntaxException();
+            if (index >= input.Count)
+            {
+                throw new ImapSyntaxException();
+            }
+
             var value = input[index++];
-            if (value is ListValue list) return Parse(list.Values);
+            if (value is ListValue list)
+            {
+                return Parse(list.Values);
+            }
+
             string Arg() => index < input.Count ? input[index++].Text() : throw new ImapSyntaxException();
+
             SearchQuery Labels()
             {
-                if (Arg() != label) throw new ImapSyntaxException();
+                if (Arg() != label)
+                {
+                    throw new ImapSyntaxException();
+                }
+
                 return processed.Count == 0 ? SearchQuery.Not(SearchQuery.All) : SearchQuery.Uids(processed.Select(id => new UniqueId(id)).ToList());
             }
+
             DateTime Date() => DateTime.ParseExact(Arg(), "d-MMM-yyyy", CultureInfo.InvariantCulture);
+
             return value.Upper() switch
             {
                 "ALL" => SearchQuery.All,
@@ -56,9 +72,18 @@ public sealed class SearchParser(string label, IReadOnlyCollection<uint> process
                 _ => throw new ImapSyntaxException()
             };
         }
-        if (input.Count == 0) throw new ImapSyntaxException();
+
+        if (input.Count == 0)
+        {
+            throw new ImapSyntaxException();
+        }
+
         var query = One();
-        while (index < input.Count) query = SearchQuery.And(query, One());
+        while (index < input.Count)
+        {
+            query = SearchQuery.And(query, One());
+        }
+
         return query;
     }
 }

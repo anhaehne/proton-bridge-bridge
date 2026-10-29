@@ -69,3 +69,33 @@ Inbox UIDVALIDITY changes block all subsequent selections, including new connect
 Mailbox membership changes within a downstream selection fail UID commands rather than emitting incorrect sequence numbers. Reconnect/reselect to refresh. Per-command serialization prevents overlapping local COPY operations; it does not reserve messages across the time Paperless asynchronously consumes documents. Concurrent Paperless pollers can queue the same unprocessed message before its label is applied. Configure one polling schedule and let actions complete. Exactly-once document ingestion across remote COPY, task crashes and Paperless's database is not claimed.
 
 Hash byte stability across folders and Bridge rebuilds remains an open live validation item. If Bridge emits different raw bytes for the same underlying message, unknown external label matching may miss membership. This is a release blocker, not something a SHA-256 unit test can prove. No production-safe identity claim is made until the official-Bridge gate passes.
+
+## Process recovery tests
+
+`RecoveryTests` launches the built application as a separate .NET process, uses
+verified TLS on both IMAP connections, and retains its real journal across abrupt
+process termination and restart. A barrier in the synthetic upstream freezes a
+command at a specific protocol boundary; no production fault injection is added.
+Tests inspect the on-disk intent before killing the owned child, then verify
+membership searches and repeated label additions against the retained remote state.
+
+| Crash boundary | Durable journal | Unique delivery after restart | Identical deliveries after restart |
+| --- | --- | --- | --- |
+| Pre-copy fingerprint fetch, before intent | No mapping | COPY succeeds once | Exact COPYUID identifies only the requested delivery |
+| COPY received, before remote mutation | Pending intent | NO; outcome remains unconfirmed | NO; outcome remains unconfirmed |
+| Remote COPY succeeds, before COPYUID response | Pending intent | Hash reconciliation prevents another COPY | NO; membership is ambiguous |
+| COPYUID received and bytes checked, before final journal commit | Pending intent | Hash reconciliation prevents another COPY | NO; the exact mapping was not persisted |
+| Completed mapping persisted | Source/label UIDVALIDITY and COPYUID | Repeated action is idempotent | Concurrent workers preserve independent mappings, including after another restart |
+
+The fixture aborts the paused command after the child has exited, making each
+remote outcome deterministic. Even when the test knows that no mutation occurred,
+the restarted proxy cannot establish that fact and retains an unresolved intent
+rather than retrying blindly. Separate process tests change Inbox UIDVALIDITY and
+reuse a UID to confirm that stale actions cannot label the replacement message.
+Source Inbox UIDs, read status and stars are checked throughout recovery.
+
+These tests exercise process-kill recovery on the test filesystem. They do not
+simulate power loss, torn writes, storage-controller caches, network-filesystem
+locking, eventual consistency in Proton, or a Bridge restart. The live Bridge
+validation gate remains necessary to establish actual COPYUID behavior and raw
+message byte stability.

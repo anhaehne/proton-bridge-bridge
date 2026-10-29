@@ -101,6 +101,20 @@ PAPERLESS_TEST_PYTHON=/tmp/proxy-wire-tests/bin/python dotnet test -c Release
 
 Without `PAPERLESS_TEST_PYTHON`, the Python client test is explicitly skipped; the C# parser, identity and verified-TLS integration suite still runs. The Python test exercises the actual pinned imap-tools commands with synthetic inline PDF messages, including read/star flags and identical deliveries. It does **not** start Paperless, OCR, its task queue, or official Bridge.
 
+The process recovery suite launches the actual proxy executable against the synthetic
+Bridge fixture, abruptly kills only that child at COPY barriers, and restarts it
+with the same journal. It verifies safe retry before an intent is persisted,
+blocked uncertain outcomes, unique-message recovery, identical-delivery ambiguity,
+concurrent workers after restart, and rejection of reused UIDs after UIDVALIDITY
+changes. Run it independently with:
+
+```sh
+dotnet test -c Release --filter FullyQualifiedName~RecoveryTests
+```
+
+See [recovery test boundaries](docs/protocol.md#process-recovery-tests) for expected
+outcomes and limitations. No production fault hooks or real account are required.
+
 The [build workflow](.github/workflows/build.yml) restores locked NuGet dependencies, runs all tests, publishes a review artifact and builds the container. It has no registry credentials, automatic publish or deployment step. Follow the [release checklist](docs/validation.md#review-and-release) before calling a build compatible with official Bridge. Dependency versions and container base digests are pinned; review updates deliberately.
 
 ## C# style checks
